@@ -5,6 +5,10 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.Extensions.Configuration; // Add this for IConfiguration
+using System;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace JWT_Authentication_Authorization.Services
 {
@@ -12,6 +16,7 @@ namespace JWT_Authentication_Authorization.Services
     {
         private readonly JwtContext _context;
         private readonly IConfiguration _configuration;
+
         public AuthService(JwtContext context, IConfiguration configuration)
         {
             _context = context;
@@ -39,7 +44,7 @@ namespace JWT_Authentication_Authorization.Services
                 var addRoles = new List<UserRole>();
                 var user = _context.Users.SingleOrDefault(s => s.Id == obj.UserId);
                 if (user == null)
-                    throw new Exception("user is not valid");
+                    throw new Exception("User is not valid");
                 foreach (int role in obj.RoleIds)
                 {
                     var userRole = new UserRole();
@@ -55,7 +60,6 @@ namespace JWT_Authentication_Authorization.Services
             {
                 return false;
             }
-
         }
 
         public string Login(LoginRequest loginRequest)
@@ -65,18 +69,16 @@ namespace JWT_Authentication_Authorization.Services
                 var user = _context.Users.SingleOrDefault(s => s.Username == loginRequest.Username && s.Password == loginRequest.Password);
                 if (user != null)
                 {
-                    var claims = new List<Claim> {
+                    var claims = new List<Claim>
+                    {
                         new Claim(JwtRegisteredClaimNames.Sub, _configuration["Jwt:Subject"]),
                         new Claim("Id", user.Id.ToString()),
-                        new Claim("UserName", user.Name)
+                        new Claim("UserName", user.Username), // Use the 'Username' property
+                        new Claim("Name", user.Name),
+                        new Claim("RoleId", user.RoleId.ToString()), // Include 'RoleId' as a claim
+                        new Claim("Password", user.Password)
                     };
-                    var userRoles = _context.UserRoles.Where(u => u.UserId == user.Id).ToList();
-                    var roleIds = userRoles.Select(s => s.RoleId).ToList();
-                    var roles = _context.Roles.Where(r => roleIds.Contains(r.Id)).ToList();
-                    foreach (var role in roles)
-                    {
-                        claims.Add(new Claim(ClaimTypes.Role, role.Name));
-                    }
+
                     var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
                     var signIn = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
                     var token = new JwtSecurityToken(
@@ -91,12 +93,12 @@ namespace JWT_Authentication_Authorization.Services
                 }
                 else
                 {
-                    throw new Exception("user is not valid");
+                    throw new Exception("User is not valid");
                 }
             }
             else
             {
-                throw new Exception("credentials are not valid");
+                throw new Exception("Credentials are not valid");
             }
         }
     }
